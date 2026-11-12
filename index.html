@@ -1,0 +1,616 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>감수 분열 시뮬레이터</title>
+<meta name="description" content="2n=4인 세포가 감수 1분열과 감수 2분열을 거쳐 딸세포 4개가 되는 과정을 단계별로 보여주는 시뮬레이터">
+<style>
+:root{
+  --bg:#f5f6f8;--panel:#ffffff;--text:#1d2330;--muted:#5b6475;--line:#dde1e8;
+  --accent:#4f46e5;--accent-text:#ffffff;--accent-soft:#eef0ff;
+  --canvas:#ffffff;--cyto:#fdf3e4;--cyto-edge:#d29a4c;--nuc:#f1dfbf;--nuc-edge:#a87b3a;
+  --fiber:#6f7888;--plate:#8f98a8;--pole:#4d5670;
+  --a1:#d93a40;--a1-edge:#8a1c20;--a2:#f59a9d;--a2-edge:#b8484c;--b1:#2f6fd6;--b1-edge:#173f87;--b2:#93bbff;--b2-edge:#4a74bd;
+  --ann:#232a36;--ann-bg:rgba(255,255,255,.92);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#101318;--panel:#191d25;--text:#e7eaf0;--muted:#9aa3b5;--line:#2b313d;
+    --accent:#8b8cf8;--accent-text:#11131a;--accent-soft:#252944;
+    --canvas:#151920;--cyto:#2c261d;--cyto-edge:#c99650;--nuc:#3b3122;--nuc-edge:#c2965a;
+    --fiber:#8f98aa;--plate:#6e7788;--pole:#c6ccd8;
+    --a1:#ff5a5f;--a1-edge:#6e1518;--a2:#ffb3b5;--a2-edge:#9a4a4d;--b1:#4f8dff;--b1-edge:#13306a;--b2:#b0ccff;--b2-edge:#4f6ea8;
+    --ann:#e3e7ee;--ann-bg:rgba(25,29,37,.92);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#101318;--panel:#191d25;--text:#e7eaf0;--muted:#9aa3b5;--line:#2b313d;
+  --accent:#8b8cf8;--accent-text:#11131a;--accent-soft:#252944;
+  --canvas:#151920;--cyto:#2c261d;--cyto-edge:#c99650;--nuc:#3b3122;--nuc-edge:#c2965a;
+  --fiber:#8f98aa;--plate:#6e7788;--pole:#c6ccd8;
+  --a1:#ff5a5f;--a1-edge:#6e1518;--a2:#ffb3b5;--a2-edge:#9a4a4d;--b1:#4f8dff;--b1-edge:#13306a;--b2:#b0ccff;--b2-edge:#4f6ea8;
+  --ann:#e3e7ee;--ann-bg:rgba(25,29,37,.92);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);
+  font-family:"Pretendard","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",system-ui,sans-serif;line-height:1.55}
+.wrap{max-width:1180px;margin:0 auto;padding:24px 16px 48px}
+header h1{margin:0 0 4px;font-size:clamp(22px,3.2vw,30px);letter-spacing:-.02em}
+header p{margin:0;color:var(--muted)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;margin-top:18px}
+.tabs{display:flex;gap:6px;background:var(--bg);padding:4px;border-radius:12px;width:fit-content;max-width:100%}
+.tab{border:0;background:transparent;color:var(--muted);font:inherit;font-weight:700;padding:9px 18px;border-radius:9px;cursor:pointer}
+.tab[aria-selected="true"]{background:var(--panel);color:var(--accent);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.stages{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:14px 0 10px}
+.stage{border:1px solid var(--line);background:var(--panel);color:var(--text);font:inherit;font-weight:600;
+  padding:8px 14px;border-radius:999px;cursor:pointer;min-width:62px}
+.stage:hover{border-color:var(--accent)}
+.stage.active{background:var(--accent);color:var(--accent-text);border-color:var(--accent)}
+.stage.done{background:var(--accent-soft);border-color:transparent}
+.arrow{color:var(--muted);font-size:13px}
+.controls{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.btn{border:1px solid var(--line);background:var(--panel);color:var(--text);font:inherit;font-weight:600;
+  padding:9px 14px;border-radius:10px;cursor:pointer}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--accent-text);border-color:var(--accent)}
+.btn.all{margin-left:auto;background:var(--accent-soft);color:var(--accent);border-color:transparent}
+.btn:focus-visible,.stage:focus-visible,.tab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.grid{display:grid;grid-template-columns:minmax(0,1.75fr) minmax(0,1fr);gap:16px;align-items:start}
+.stagewrap{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--canvas)}
+canvas{display:block;width:100%;aspect-ratio:900/560}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:13px;color:var(--muted);margin-top:10px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{display:inline-block;width:22px;height:8px;border-radius:4px}
+.info h2{margin:0 0 2px;font-size:22px}
+.info .sec{color:var(--accent);font-weight:700;font-size:13px}
+.info p.desc{margin:10px 0 14px;font-size:15.5px}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.stat{background:var(--bg);border-radius:10px;padding:10px 12px}
+.stat .k{font-size:12px;color:var(--muted)}
+.stat .v{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums}
+.note{font-size:13px;color:var(--muted);margin-top:12px}
+.kbd{font-size:12px;color:var(--muted);margin-top:14px}
+@media (max-width:860px){.grid{grid-template-columns:1fr}.btn.all{margin-left:0}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>감수 분열 시뮬레이터</h1>
+    <p>체세포 염색체 수가 4개(2n=4)인 모세포가 감수 1분열과 감수 2분열을 거쳐 딸세포 4개가 되는 과정</p>
+  </header>
+
+  <section class="card">
+    <div class="tabs" role="tablist" aria-label="분열 선택">
+      <button class="tab" role="tab" id="tab1" aria-selected="true" data-sec="1">감수 1분열</button>
+      <button class="tab" role="tab" id="tab2" aria-selected="false" data-sec="2">감수 2분열</button>
+    </div>
+
+    <div class="stages" id="stages" aria-label="단계 선택"></div>
+
+    <div class="controls">
+      <button class="btn primary" id="playBtn">▶ 간기부터 결과까지 순서대로 분열</button>
+      <button class="btn" id="resetBtn">⟲ 처음으로</button>
+      <button class="btn all" id="allBtn">★ 전체 과정 한번에 보기 (감수 1분열 → 2분열, 딸세포 4개)</button>
+    </div>
+
+    <div class="grid">
+      <div>
+        <div class="stagewrap"><canvas id="cv" role="img" aria-label="감수 분열 단계 그림"></canvas></div>
+        <div class="legend">
+          <span><i class="sw" style="background:var(--a1)"></i><i class="sw" style="background:var(--a2)"></i>긴 상동 염색체 쌍</span>
+          <span><i class="sw" style="background:var(--b1)"></i><i class="sw" style="background:var(--b2)"></i>짧은 상동 염색체 쌍</span>
+          <span>진한 색 = 어머니에게서, 연한 색 = 아버지에게서 받은 염색체</span>
+        </div>
+      </div>
+      <div class="info" aria-live="polite">
+        <div class="sec" id="infoSec">감수 1분열</div>
+        <h2 id="infoTitle">간기</h2>
+        <p class="desc" id="infoDesc"></p>
+        <div class="stats">
+          <div class="stat"><div class="k">세포 수</div><div class="v" id="sCells">1</div></div>
+          <div class="stat"><div class="k">세포 1개당 염색체 수</div><div class="v" id="sChrom">4</div></div>
+          <div class="stat"><div class="k">세포 1개당 염색 분체 수</div><div class="v" id="sTid">8</div></div>
+          <div class="stat"><div class="k">세포 1개당 DNA 상대량</div><div class="v" id="sDna">4</div></div>
+        </div>
+        <div class="note" id="infoNote"></div>
+        <div class="kbd">키보드 ← → 로 단계를 이동할 수 있어요.</div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+const W = 900, H = 560, PI2 = Math.PI / 2;
+const AM = 0, AP = 1, BM = 2, BP = 3;           // A=긴 염색체, B=짧은 염색체, m=모계, p=부계
+const LEN = [78, 78, 46, 46];
+const COLK = ['a1', 'a2', 'b1', 'b2'];
+
+/* ---------- 상태 만들기 도우미 ---------- */
+const four = f => [0, 1, 2, 3].map(f);
+const cell = (x, y, rx, ry) => ({ x, y, rx, ry: ry ?? rx });
+const nuc = (x, y, r, a) => ({ x, y, r, a });
+const pole = (x, y, a) => ({ x, y, a });
+const plate = (x1, y1, x2, y2, a) => ({ x1, y1, x2, y2, a });
+function blank() {
+  return { cells: [], nuclei: [], poles: [], polar: 'I', spA: 0,
+    plates: [plate(450, 95, 450, 465, 0), plate(450, 95, 450, 465, 0)], ct: new Array(8), ann: [] };
+}
+// 복제된(또는 복제 전) 염색체 1개 = 염색 분체 2개
+function chrom(S, ci, x, y, a, o = {}) {
+  const d = o.d ?? 5.5, px = -Math.sin(a), py = Math.cos(a);
+  for (let s = 0; s < 2; s++) {
+    const side = s ? 1 : -1;
+    const pl = o.poles ? o.poles[s] : (o.pole || { x, y });
+    S.ct[ci * 2 + s] = { x: x + px * side * d, y: y + py * side * d, a, len: LEN[ci],
+      bend: side * (o.bend ?? (d > 0 ? 3.5 : 0)), px: pl.x, py: pl.y, fa: o.fa ?? 0 };
+  }
+}
+// 분리된 염색 분체 1개
+function tid(S, ci, s, x, y, a, o = {}) {
+  const pl = o.pole || { x, y };
+  S.ct[ci * 2 + s] = { x, y, a, len: LEN[ci], bend: o.bend ?? 0, px: pl.x, py: pl.y, fa: o.fa ?? 0 };
+}
+
+const ST = {};
+const CX = 450, CY = 280;
+
+/* ---------- 감수 1분열 ---------- */
+// G1 (복제 전)
+ST.G1 = (() => { const S = blank();
+  S.cells = four(() => cell(CX, CY, 215)); S.nuclei = four(() => nuc(CX, CY, 125, 1));
+  S.poles = four(() => pole(CX, 118, .9));
+  chrom(S, AM, 395, 240, .5, { d: 0 }); chrom(S, AP, 505, 325, -.7, { d: 0 });
+  chrom(S, BM, 510, 222, 1.3, { d: 0 }); chrom(S, BP, 395, 335, 2.1, { d: 0 });
+  return S; })();
+
+// 간기 (DNA 복제 완료)
+ST.I0 = (() => { const S = blank();
+  S.cells = four(() => cell(CX, CY, 215)); S.nuclei = four(() => nuc(CX, CY, 125, 1));
+  S.poles = [pole(438, 118, .9), pole(438, 118, .9), pole(462, 118, .9), pole(462, 118, .9)];
+  chrom(S, AM, 395, 240, .5); chrom(S, AP, 505, 325, -.7);
+  chrom(S, BM, 510, 222, 1.3); chrom(S, BP, 395, 335, 2.1);
+  S.ann = [{ x: 382, y: 232, tx: 118, ty: 100, text: '복제된 염색체 (염색 분체 2개)' },
+           { x: 450, y: 118, tx: 450, ty: 40, text: '중심체 복제' }];
+  return S; })();
+
+// 전기: 상동 염색체 접합 → 2가 염색체
+ST.I1 = (() => { const S = blank();
+  const L = { x: 300, y: CY }, R = { x: 600, y: CY };
+  S.cells = four(() => cell(CX, CY, 215)); S.nuclei = four(() => nuc(CX, CY, 130, .3));
+  S.poles = [pole(L.x, L.y, 1), pole(L.x, L.y, 1), pole(R.x, R.y, 1), pole(R.x, R.y, 1)];
+  S.spA = .35;
+  chrom(S, AM, 411, 225, PI2 - .15, { pole: L, fa: .2 }); chrom(S, AP, 439, 225, PI2 - .15, { pole: R, fa: .2 });
+  chrom(S, BP, 466, 330, PI2 + .2, { pole: L, fa: .2 }); chrom(S, BM, 494, 330, PI2 + .2, { pole: R, fa: .2 });
+  S.ann = [{ x: 425, y: 186, tx: 150, ty: 90, text: '2가 염색체 (상동 염색체 짝)' },
+           { x: 480, y: 357, tx: 760, ty: 480, text: '2가 염색체' },
+           { x: 560, y: 175, tx: 770, ty: 80, text: '핵막이 사라짐' }];
+  return S; })();
+
+// 중기: 2가 염색체가 적도판에 배열
+ST.I2 = (() => { const S = blank();
+  const L = { x: 250, y: CY }, R = { x: 650, y: CY };
+  S.cells = four(() => cell(CX, CY, 215)); S.nuclei = four(() => nuc(CX, CY, 130, 0));
+  S.poles = [pole(L.x, L.y, 1), pole(L.x, L.y, 1), pole(R.x, R.y, 1), pole(R.x, R.y, 1)];
+  S.spA = .8;
+  S.plates = [plate(CX, 95, CX, 465, .75), plate(CX, 95, CX, 465, .75)];
+  chrom(S, AM, 436, 205, PI2, { pole: L, fa: .9 }); chrom(S, AP, 464, 205, PI2, { pole: R, fa: .9 });
+  chrom(S, BP, 436, 355, PI2, { pole: L, fa: .9 }); chrom(S, BM, 464, 355, PI2, { pole: R, fa: .9 });
+  S.ann = [{ tx: CX, ty: 74, text: '적도판' },
+           { x: 340, y: 244, tx: 140, ty: 470, text: '방추사' }];
+  return S; })();
+
+// 후기: 상동 염색체 분리
+ST.I3 = (() => { const S = blank();
+  const L = { x: 200, y: CY }, R = { x: 700, y: CY };
+  S.cells = four(() => cell(CX, CY, 265, 195)); S.nuclei = four(() => nuc(CX, CY, 130, 0));
+  S.poles = [pole(L.x, L.y, 1), pole(L.x, L.y, 1), pole(R.x, R.y, 1), pole(R.x, R.y, 1)];
+  S.spA = .8;
+  chrom(S, AM, 305, 215, PI2 - .12, { pole: L, fa: .9 }); chrom(S, BP, 305, 345, PI2 + .12, { pole: L, fa: .9 });
+  chrom(S, AP, 595, 215, PI2 + .12, { pole: R, fa: .9 }); chrom(S, BM, 595, 345, PI2 - .12, { pole: R, fa: .9 });
+  S.ann = [{ tx: CX, ty: 58, text: '상동 염색체가 분리되어 양극으로 이동' }];
+  return S; })();
+
+// 말기: 세포질 분열
+ST.I4 = (() => { const S = blank();
+  const L = { x: 110, y: CY }, R = { x: 790, y: CY };
+  S.cells = [cell(268, CY, 192, 185), cell(268, CY, 192, 185), cell(632, CY, 192, 185), cell(632, CY, 192, 185)];
+  S.nuclei = [nuc(268, CY, 92, .55), nuc(268, CY, 92, .55), nuc(632, CY, 92, .55), nuc(632, CY, 92, .55)];
+  S.poles = [pole(L.x, L.y, .4), pole(L.x, L.y, .4), pole(R.x, R.y, .4), pole(R.x, R.y, .4)];
+  S.spA = .15;
+  chrom(S, AM, 250, 250, 1.4, { pole: L, fa: .2 }); chrom(S, BP, 292, 318, 1.75, { pole: L, fa: .2 });
+  chrom(S, AP, 612, 250, 1.4, { pole: R, fa: .2 }); chrom(S, BM, 654, 318, 1.75, { pole: R, fa: .2 });
+  S.ann = [{ x: CX, y: 345, tx: CX, ty: 515, text: '세포질 분열' },
+           { tx: CX, ty: 58, text: '염색체 수 4개 → 2개 (절반)' }];
+  return S; })();
+
+// 결과: 딸세포 2개 (n=2)
+function resultI() { const S = blank();
+  S.cells = [cell(250, CY, 165), cell(250, CY, 165), cell(650, CY, 165), cell(650, CY, 165)];
+  S.nuclei = [nuc(250, CY, 95, 1), nuc(250, CY, 95, 1), nuc(650, CY, 95, 1), nuc(650, CY, 95, 1)];
+  S.poles = [pole(250, 145, .8), pole(250, 145, .8), pole(650, 145, .8), pole(650, 145, .8)];
+  S.polar = 'II';
+  chrom(S, AM, 228, 265, 1.2); chrom(S, BP, 282, 300, 2.0);
+  chrom(S, AP, 628, 265, 1.2); chrom(S, BM, 682, 300, 2.0);
+  return S; }
+ST.I5 = (() => { const S = resultI();
+  S.ann = [{ tx: 250, ty: 478, text: '염색체 2개 (n=2)' }, { tx: 650, ty: 478, text: '염색체 2개 (n=2)' }];
+  return S; })();
+
+/* ---------- 감수 2분열 ---------- */
+// 간기 (짧음, DNA 복제 없음)
+ST.II0 = (() => { const S = resultI();
+  S.poles = [pole(240, 145, .8), pole(260, 145, .8), pole(640, 145, .8), pole(660, 145, .8)];
+  chrom(S, AM, 230, 262, 1.0); chrom(S, BP, 280, 302, 2.2);
+  chrom(S, AP, 630, 262, 1.0); chrom(S, BM, 680, 302, 2.2);
+  S.ann = [{ tx: CX, ty: 48, text: 'DNA 복제가 일어나지 않음' }];
+  return S; })();
+
+const LT = { x: 250, y: 135 }, LB = { x: 250, y: 425 }, RT = { x: 650, y: 135 }, RB = { x: 650, y: 425 };
+// 전기
+ST.II1 = (() => { const S = resultI();
+  S.nuclei.forEach(n => { n.a = .3; n.r = 100; });
+  S.poles = [pole(LT.x, LT.y, 1), pole(LB.x, LB.y, 1), pole(RT.x, RT.y, 1), pole(RB.x, RB.y, 1)];
+  S.spA = .35;
+  chrom(S, AM, 222, 268, .35, { poles: [LT, LB], fa: .2 }); chrom(S, BP, 284, 298, -.3, { poles: [LT, LB], fa: .2 });
+  chrom(S, AP, 622, 268, .35, { poles: [RT, RB], fa: .2 }); chrom(S, BM, 684, 298, -.3, { poles: [RT, RB], fa: .2 });
+  S.ann = [{ tx: CX, ty: 48, text: 'DNA 복제 없이 바로 두 번째 분열 시작' }];
+  return S; })();
+
+// 중기
+ST.II2 = (() => { const S = resultI();
+  const lt = { x: 250, y: 125 }, lb = { x: 250, y: 435 }, rt = { x: 650, y: 125 }, rb = { x: 650, y: 435 };
+  S.nuclei.forEach(n => { n.a = 0; n.r = 100; });
+  S.poles = [pole(lt.x, lt.y, 1), pole(lb.x, lb.y, 1), pole(rt.x, rt.y, 1), pole(rb.x, rb.y, 1)];
+  S.spA = .8;
+  S.plates = [plate(115, CY, 385, CY, .75), plate(515, CY, 785, CY, .75)];
+  chrom(S, AM, 205, CY, 0, { poles: [lt, lb], fa: .9 }); chrom(S, BP, 296, CY, 0, { poles: [lt, lb], fa: .9 });
+  chrom(S, AP, 605, CY, 0, { poles: [rt, rb], fa: .9 }); chrom(S, BM, 696, CY, 0, { poles: [rt, rb], fa: .9 });
+  S.ann = [{ tx: CX, ty: CY + 5, text: '적도판' }];
+  return S; })();
+
+// 후기: 염색 분체 분리
+ST.II3 = (() => { const S = resultI();
+  const lt = { x: 250, y: 80 }, lb = { x: 250, y: 480 }, rt = { x: 650, y: 80 }, rb = { x: 650, y: 480 };
+  S.cells = [cell(250, CY, 150, 220), cell(250, CY, 150, 220), cell(650, CY, 150, 220), cell(650, CY, 150, 220)];
+  S.nuclei.forEach(n => { n.a = 0; n.r = 100; });
+  S.poles = [pole(lt.x, lt.y, 1), pole(lb.x, lb.y, 1), pole(rt.x, rt.y, 1), pole(rb.x, rb.y, 1)];
+  S.spA = .8;
+  const up = { bend: 9, fa: .9 }, dn = { bend: -9, fa: .9 };
+  tid(S, AM, 0, 210, 178, 0, { ...up, pole: lt }); tid(S, AM, 1, 210, 382, 0, { ...dn, pole: lb });
+  tid(S, BP, 0, 292, 178, 0, { ...up, pole: lt }); tid(S, BP, 1, 292, 382, 0, { ...dn, pole: lb });
+  tid(S, AP, 0, 610, 178, 0, { ...up, pole: rt }); tid(S, AP, 1, 610, 382, 0, { ...dn, pole: rb });
+  tid(S, BM, 0, 692, 178, 0, { ...up, pole: rt }); tid(S, BM, 1, 692, 382, 0, { ...dn, pole: rb });
+  S.ann = [{ tx: CX, ty: CY - 8, text: '염색 분체' }, { tx: CX, ty: CY + 14, text: '분리' }];
+  return S; })();
+
+// 말기
+ST.II4 = (() => { const S = resultI();
+  S.cells = [cell(250, 168, 140, 128), cell(250, 392, 140, 128), cell(650, 168, 140, 128), cell(650, 392, 140, 128)];
+  S.nuclei = [nuc(250, 162, 72, .55), nuc(250, 398, 72, .55), nuc(650, 162, 72, .55), nuc(650, 398, 72, .55)];
+  const lt = { x: 250, y: 52 }, lb = { x: 250, y: 508 }, rt = { x: 650, y: 52 }, rb = { x: 650, y: 508 };
+  S.poles = [pole(lt.x, lt.y, .3), pole(lb.x, lb.y, .3), pole(rt.x, rt.y, .3), pole(rb.x, rb.y, .3)];
+  S.spA = .12;
+  const o = (p, b) => ({ pole: p, fa: .2, bend: b });
+  tid(S, AM, 0, 226, 158, .25, o(lt, 3)); tid(S, BP, 0, 280, 172, -.2, o(lt, 3));
+  tid(S, AM, 1, 226, 388, -.25, o(lb, -3)); tid(S, BP, 1, 280, 402, .2, o(lb, -3));
+  tid(S, AP, 0, 626, 158, .25, o(rt, 3)); tid(S, BM, 0, 680, 172, -.2, o(rt, 3));
+  tid(S, AP, 1, 626, 388, -.25, o(rb, -3)); tid(S, BM, 1, 680, 402, .2, o(rb, -3));
+  S.ann = [{ tx: CX, ty: CY - 8, text: '세포질' }, { tx: CX, ty: CY + 14, text: '분열' }];
+  return S; })();
+
+// 결과: 딸세포 4개
+ST.II5 = (() => { const S = resultI();
+  const P = [[250, 145], [250, 415], [650, 145], [650, 415]];
+  S.cells = P.map(([x, y]) => cell(x, y, 112));
+  S.nuclei = P.map(([x, y]) => nuc(x, y, 64, 1));
+  S.poles = P.map(([x, y]) => pole(x, y - 90, 0));
+  [[AM, BP, 0], [AP, BM, 400]].forEach(([a, b, dx]) => {
+    tid(S, a, 0, 232 + dx, 140, 1.1); tid(S, b, 0, 274 + dx, 152, 2.0);
+    tid(S, a, 1, 232 + dx, 410, 1.1); tid(S, b, 1, 274 + dx, 422, 2.0);
+  });
+  S.ann = P.map(([x, y]) => ({ tx: x < CX ? 82 : 818, ty: y + 5, text: 'n=2' }));
+  return S; })();
+
+/* ---------- 단계 정보 ---------- */
+const NAMES = ['간기', '전기', '중기', '후기', '말기', '결과'];
+const SEQ = { 1: ['I0', 'I1', 'I2', 'I3', 'I4', 'I5'], 2: ['II0', 'II1', 'II2', 'II3', 'II4', 'II5'] };
+const INFO = {
+  I0: { d: 'DNA가 복제됩니다. 복제가 끝나면 각 염색체는 똑같은 염색 분체 2개가 동원체에서 붙어 있는 모양이 됩니다. 중심체도 2개로 복제됩니다.',
+        s: [1, 4, 8, '2 → 4'], n: '핵상 2n=4 · 복제 전후 염색체 수는 4개로 같지만 DNA 양은 2배가 됩니다.' },
+  I1: { d: '상동 염색체끼리 짝지어 붙어서 2가 염색체가 됩니다. 핵막이 사라지고 방추사가 만들어지기 시작합니다.',
+        s: [1, 4, 8, 4], n: '2가 염색체 2개 (2가 염색체 1개 = 상동 염색체 2개 = 염색 분체 4개)' },
+  I2: { d: '2가 염색체가 세포 가운데(적도판)에 늘어섭니다. 양극에서 뻗어 나온 방추사가 각 상동 염색체의 동원체에 붙습니다.',
+        s: [1, 4, 8, 4], n: '핵상 2n=4' },
+  I3: { d: '상동 염색체가 분리되어 방추사에 끌려 양극으로 이동합니다. 염색 분체는 아직 붙어 있습니다.',
+        s: [1, 4, 8, 4], n: '어느 쪽 극으로 가는지는 상동 염색체 쌍마다 무작위로 정해집니다.' },
+  I4: { d: '세포질이 나뉘어 딸세포 2개가 됩니다. 여기서 염색체 수가 4개에서 2개로 절반이 됩니다.',
+        s: [2, 2, 4, 2], n: '핵상 2n=4 → n=2 (상동 염색체가 서로 다른 세포로 나뉘었기 때문)' },
+  I5: { d: '감수 1분열 결과, 염색체 수가 모세포의 절반(2개)인 딸세포 2개가 만들어집니다. 각 염색체는 아직 염색 분체 2개로 되어 있습니다.',
+        s: [2, 2, 4, 2], n: '핵상 n=2 · 감수 2분열로 이어집니다.' },
+  II0: { d: '감수 2분열 전의 짧은 시기입니다. 감수 1분열 전과 달리 DNA 복제가 일어나지 않습니다.',
+        s: [2, 2, 4, 2], n: '핵상 n=2 · DNA 상대량 그대로 2' },
+  II1: { d: 'DNA 복제 없이 바로 두 번째 분열을 시작합니다. 핵막이 사라지고 각 세포에서 방추사가 만들어집니다.',
+        s: [2, 2, 4, 2], n: '감수 2분열에는 상동 염색체가 없으므로 2가 염색체가 생기지 않습니다.' },
+  II2: { d: '염색체가 각 세포 가운데(적도판)에 한 줄로 늘어섭니다. 방추사가 각 염색 분체의 동원체에 붙습니다.',
+        s: [2, 2, 4, 2], n: '핵상 n=2' },
+  II3: { d: '염색 분체가 분리되어 방추사에 끌려 양극으로 이동합니다. 분리된 염색 분체는 각각 하나의 염색체가 됩니다.',
+        s: [2, 4, 4, 2], n: '분리 직후 한 세포 안의 염색체 수는 잠시 4개로 늘어납니다.' },
+  II4: { d: '세포질이 나뉘어서 염색체 수가 모세포의 절반인 딸세포 4개가 됩니다.',
+        s: [4, 2, 2, 1], n: '핵상 n=2 · DNA 상대량은 모세포(복제 전)의 절반' },
+  II5: { d: '감수 분열이 끝나 염색체 수가 모세포(4개)의 절반인 2개(n=2)를 가진 딸세포 4개가 만들어졌습니다. 4개 모두 긴 염색체 1개와 짧은 염색체 1개를 가집니다.',
+        s: [4, 2, 2, 1], n: '모세포 1개(2n=4) → 딸세포 4개(n=2). 생식세포(정자·난자)가 이렇게 만들어집니다.' },
+  G1: { d: 'DNA가 복제되기 전의 간기입니다. 각 염색체는 염색 분체 1개로 되어 있습니다.',
+        s: [1, 4, 4, 2], n: '핵상 2n=4' },
+};
+
+/* ---------- 그리기 ---------- */
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+let C = {};
+function readColors() {
+  const cs = getComputedStyle(document.documentElement);
+  ['canvas', 'cyto', 'cyto-edge', 'nuc', 'nuc-edge', 'fiber', 'plate', 'pole', 'a1', 'a1-edge', 'a2', 'a2-edge', 'b1', 'b1-edge', 'b2', 'b2-edge', 'ann', 'ann-bg']
+    .forEach(k => C[k] = cs.getPropertyValue('--' + k).trim());
+}
+readColors();
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { readColors(); draw(); });
+
+let cur = clone(ST.G1), annList = [], annAlpha = 1, banner = '';
+
+const near = (a, b) => Math.abs(a.x - b.x) < 1 && Math.abs(a.y - b.y) < 1;
+function dedup(arr, extra) {
+  const out = [];
+  arr.forEach(o => { if (!out.some(p => near(p, o) && (!extra || extra(p, o)))) out.push(o); });
+  return out;
+}
+function pill(text, x, y, alpha) {
+  ctx.save(); ctx.globalAlpha = alpha;
+  ctx.font = '700 15px "Pretendard","Apple SD Gothic Neo","Malgun Gothic",sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const w = ctx.measureText(text).width + 16;
+  ctx.fillStyle = C['ann-bg'];
+  ctx.beginPath(); ctx.roundRect(x - w / 2, y - 13, w, 26, 8); ctx.fill();
+  ctx.fillStyle = C.ann; ctx.fillText(text, x, y + 1);
+  ctx.restore();
+}
+
+function draw() {
+  ctx.setTransform(cv.width / W, 0, 0, cv.height / H, 0, 0);
+  ctx.fillStyle = C.canvas; ctx.fillRect(0, 0, W, H);
+  const S = cur;
+
+  // 세포 (겹친 타원의 합집합 → 세포질 분열 홈)
+  ctx.lineWidth = 6; ctx.strokeStyle = C['cyto-edge'];
+  S.cells.forEach(c => { ctx.beginPath(); ctx.ellipse(c.x, c.y, c.rx, c.ry, 0, 0, Math.PI * 2); ctx.stroke(); });
+  ctx.fillStyle = C.cyto;
+  S.cells.forEach(c => { ctx.beginPath(); ctx.ellipse(c.x, c.y, c.rx, c.ry, 0, 0, Math.PI * 2); ctx.fill(); });
+
+  // 핵막
+  dedup(S.nuclei, (p, o) => Math.abs(p.r - o.r) < 1).forEach(n => {
+    if (n.a < .01) return;
+    ctx.save(); ctx.globalAlpha = n.a * .6; ctx.fillStyle = C.nuc;
+    ctx.beginPath(); ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = n.a; ctx.strokeStyle = C['nuc-edge']; ctx.lineWidth = 2; ctx.setLineDash([7, 5]);
+    ctx.stroke(); ctx.restore();
+  });
+
+  // 적도판
+  const pls = [];
+  S.plates.forEach(p => { if (!pls.some(q => Math.abs(q.x1 - p.x1) < 1 && Math.abs(q.y1 - p.y1) < 1)) pls.push(p); });
+  pls.forEach(p => {
+    if (p.a < .01) return;
+    ctx.save(); ctx.globalAlpha = p.a; ctx.strokeStyle = C.plate; ctx.lineWidth = 2; ctx.setLineDash([4, 6]);
+    ctx.beginPath(); ctx.moveTo(p.x1, p.y1); ctx.lineTo(p.x2, p.y2); ctx.stroke(); ctx.restore();
+  });
+
+  // 극 사이 방추사
+  if (S.spA > .01) {
+    const pairs = S.polar === 'I' ? [[0, 2]] : [[0, 1], [2, 3]];
+    ctx.save(); ctx.strokeStyle = C.fiber; ctx.lineWidth = 1.2; ctx.globalAlpha = S.spA * .45;
+    pairs.forEach(([i, j]) => {
+      const a = S.poles[i], b = S.poles[j];
+      const dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy) || 1;
+      const nx = -dy / L, ny = dx / L, mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      [-1, -.55, .55, 1].forEach(k => {
+        const off = k * L * .32;
+        ctx.beginPath(); ctx.moveTo(a.x, a.y);
+        ctx.quadraticCurveTo(mx + nx * off, my + ny * off, b.x, b.y); ctx.stroke();
+      });
+    });
+    ctx.restore();
+  }
+
+  // 동원체에 붙는 방추사
+  ctx.save(); ctx.strokeStyle = C.fiber; ctx.lineWidth = 1.4;
+  S.ct.forEach(t => {
+    if (t.fa < .01) return;
+    ctx.globalAlpha = t.fa * .75;
+    ctx.beginPath(); ctx.moveTo(t.px, t.py); ctx.lineTo(t.x, t.y); ctx.stroke();
+  });
+  ctx.restore();
+
+  // 중심체
+  dedup(S.poles).forEach(p => {
+    if (p.a < .01) return;
+    ctx.save(); ctx.globalAlpha = p.a; ctx.strokeStyle = C.pole; ctx.lineWidth = 1.3;
+    for (let i = 0; i < 12; i++) {
+      const an = i * Math.PI / 6;
+      ctx.beginPath(); ctx.moveTo(p.x + Math.cos(an) * 7, p.y + Math.sin(an) * 7);
+      ctx.lineTo(p.x + Math.cos(an) * 16, p.y + Math.sin(an) * 16); ctx.stroke();
+    }
+    ctx.fillStyle = C.pole;
+    ctx.fillRect(p.x - 5, p.y - 2, 4, 5); ctx.fillRect(p.x + 1, p.y - 3, 4, 6);
+    ctx.restore();
+  });
+
+  // 염색 분체
+  S.ct.forEach((t, i) => {
+    const k = COLK[i >> 1];
+    const dx = Math.cos(t.a), dy = Math.sin(t.a), nx = -dy, ny = dx, h = t.len / 2;
+    const path = () => {
+      ctx.beginPath();
+      ctx.moveTo(t.x - dx * h + nx * t.bend, t.y - dy * h + ny * t.bend);
+      ctx.lineTo(t.x, t.y);
+      ctx.lineTo(t.x + dx * h + nx * t.bend, t.y + dy * h + ny * t.bend);
+    };
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    path(); ctx.strokeStyle = C[k + '-edge']; ctx.lineWidth = 11.5; ctx.stroke();
+    path(); ctx.strokeStyle = C[k]; ctx.lineWidth = 8.5; ctx.stroke();
+  });
+  // 동원체
+  S.ct.forEach((t, i) => {
+    ctx.fillStyle = C[COLK[i >> 1] + '-edge'];
+    ctx.beginPath(); ctx.arc(t.x, t.y, 3.4, 0, Math.PI * 2); ctx.fill();
+  });
+
+  // 설명 라벨
+  if (annAlpha > .01) annList.forEach(a => {
+    if (a.x !== undefined) {
+      ctx.save(); ctx.globalAlpha = annAlpha * .8; ctx.strokeStyle = C.ann; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(a.tx, a.ty); ctx.lineTo(a.x, a.y); ctx.stroke();
+      ctx.beginPath(); ctx.arc(a.x, a.y, 3, 0, Math.PI * 2); ctx.fillStyle = C.ann; ctx.fill(); ctx.restore();
+    }
+    pill(a.text, a.tx, a.ty, annAlpha);
+  });
+  if (banner) pill(banner, CX, 24, 1);
+}
+
+function resize() {
+  const r = cv.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+  cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.width * H / W * dpr); draw();
+}
+new ResizeObserver(resize).observe(cv);
+
+/* ---------- 애니메이션 ---------- */
+function clone(o) { return JSON.parse(JSON.stringify(o)); }
+function lerp(a, b, t) {
+  if (typeof b === 'number') return typeof a === 'number' ? a + (b - a) * t : b;
+  if (Array.isArray(b)) return b.map((v, i) => lerp(a ? a[i] : undefined, v, t));
+  if (b && typeof b === 'object') { const o = {}; for (const k in b) o[k] = lerp(a ? a[k] : undefined, b[k], t); return o; }
+  return b;
+}
+const ease = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+let runId = 0;
+function tween(target, dur, id) {
+  return new Promise(res => {
+    const from = clone(cur), t0 = performance.now();
+    if (reduce) dur = Math.min(dur, 250);
+    annList = target.ann || []; annAlpha = 0;
+    const tgt = { ...target, ann: undefined };
+    function step(now) {
+      if (id !== runId) return res(false);
+      const t = Math.min(1, (now - t0) / dur);
+      cur = lerp(from, tgt, ease(t)); annAlpha = Math.max(0, (t - .55) / .45);
+      draw();
+      if (t < 1) requestAnimationFrame(step); else res(true);
+    }
+    requestAnimationFrame(step);
+  });
+}
+const wait = (ms, id) => new Promise(r => setTimeout(() => r(id === runId), reduce ? ms * .6 : ms));
+
+/* ---------- UI ---------- */
+const stagesEl = document.getElementById('stages');
+const tabs = [...document.querySelectorAll('.tab')];
+const playBtn = document.getElementById('playBtn');
+let sec = 1, curKey = 'I0', playing = false;
+
+function buildStages() {
+  stagesEl.innerHTML = '';
+  SEQ[sec].forEach((key, i) => {
+    if (i) { const ar = document.createElement('span'); ar.className = 'arrow'; ar.textContent = '→'; ar.setAttribute('aria-hidden', 'true'); stagesEl.appendChild(ar); }
+    const b = document.createElement('button');
+    b.className = 'stage'; b.textContent = NAMES[i]; b.dataset.key = key;
+    b.addEventListener('click', () => goStage(key));
+    stagesEl.appendChild(b);
+  });
+}
+function setUI(key) {
+  curKey = key;
+  const s = key.startsWith('II') ? 2 : 1;
+  if (s !== sec) { sec = s; buildStages(); }
+  tabs.forEach(t => t.setAttribute('aria-selected', String(+t.dataset.sec === sec)));
+  const idx = SEQ[sec].indexOf(key);
+  [...stagesEl.querySelectorAll('.stage')].forEach((b, i) => {
+    b.classList.toggle('active', i === idx); b.classList.toggle('done', idx >= 0 && i < idx);
+    b.setAttribute('aria-pressed', String(i === idx));
+  });
+  const inf = INFO[key];
+  document.getElementById('infoSec').textContent = sec === 1 ? '감수 1분열' : '감수 2분열';
+  document.getElementById('infoTitle').textContent = key === 'G1' ? '간기 (DNA 복제 전)' : NAMES[idx];
+  document.getElementById('infoDesc').textContent = inf.d;
+  ['sCells', 'sChrom', 'sTid', 'sDna'].forEach((id, i) => document.getElementById(id).textContent = inf.s[i]);
+  document.getElementById('infoNote').textContent = inf.n;
+}
+function setPlaying(p) {
+  playing = p;
+  playBtn.textContent = p ? '■ 정지' : '▶ 간기부터 결과까지 순서대로 분열';
+}
+
+async function showStage(key, id, holdAfter) {
+  setUI(key);
+  if (key === 'I0') {
+    // 간기: DNA 복제 과정을 보여줌
+    cur = clone(ST.G1); annList = []; banner = 'DNA 복제 중…'; draw();
+    if (!await wait(500, id)) return false;
+    const ok = await tween(ST.I0, 1800, id);
+    banner = ok ? 'DNA 복제 완료' : ''; draw();
+    if (!ok) return false;
+    setTimeout(() => { if (id === runId && banner === 'DNA 복제 완료') { banner = ''; draw(); } }, 1400);
+  } else {
+    banner = '';
+    if (!await tween(ST[key], 1100, id)) return false;
+  }
+  if (holdAfter) return wait(holdAfter, id);
+  return true;
+}
+
+function goStage(key) {
+  const id = ++runId; setPlaying(false);
+  // 감수 2분열로 처음 넘어가는 경우 감수 1분열 결과에서 시작
+  if (key.startsWith('II') && !curKey.startsWith('II')) { cur = clone(ST.I5); }
+  if (key.startsWith('I') && !key.startsWith('II') && curKey.startsWith('II')) { cur = clone(ST.G1); }
+  showStage(key, id, 0);
+}
+
+async function playKeys(keys) {
+  const id = ++runId; setPlaying(true);
+  if (keys[0] === 'II0') cur = clone(ST.I5);
+  for (const k of keys) {
+    if (!await showStage(k, id, k === 'I0' ? 1400 : 1700)) return;
+  }
+  if (id === runId) setPlaying(false);
+}
+
+playBtn.addEventListener('click', () => {
+  if (playing) { runId++; setPlaying(false); banner = ''; draw(); return; }
+  playKeys(SEQ[sec]);
+});
+document.getElementById('allBtn').addEventListener('click', () => playKeys([...SEQ[1], ...SEQ[2]]));
+document.getElementById('resetBtn').addEventListener('click', () => {
+  runId++; setPlaying(false); banner = '';
+  if (sec === 1) { cur = clone(ST.G1); annList = []; setUI('G1'); draw(); }
+  else { goStage('II0'); }
+});
+tabs.forEach(t => t.addEventListener('click', () => {
+  const s = +t.dataset.sec; if (s === sec && !playing) return;
+  goStage(SEQ[s][0]);
+}));
+document.addEventListener('keydown', e => {
+  if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+  const all = [...SEQ[1], ...SEQ[2]];
+  let i = all.indexOf(curKey); if (i < 0) i = -1;
+  i = Math.max(0, Math.min(all.length - 1, i + (e.key === 'ArrowRight' ? 1 : -1)));
+  goStage(all[i]);
+});
+
+buildStages();
+setUI('G1');
+resize();
+})();
+</script>
+</body>
+</html>
